@@ -1,39 +1,50 @@
-name: Deploy to Cloud Run
+from fastapi import FastAPI, Request, HTTPException
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import os
+import logging
 
-on:
-  push:
-    branches: [ main ]
+app = FastAPI(title="競馬予想AI Bot")
 
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  SERVICE_NAME: keiba-ai-bot
-  REGION: asia-northeast1
+# 環境変数
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
+LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+@app.get("/")
+async def root():
+    return {"message": "競馬予想AI Bot 稼働中"}
+
+@app.post("/webhook")
+async def callback(request: Request):
+    signature = request.headers['X-Line-Signature']
+    body = await request.body()
     
-    - id: auth
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    try:
+        handler.handle(body.decode(), signature)
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
     
-    - name: Configure Docker
-      run: gcloud auth configure-docker
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    # 競馬予想ロジックをここに統合予定
+    user_message = event.message.text
     
-    - name: Build
-      run: docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME .
+    if "予想" in user_message:
+        reply_text = "🏇 競馬予想AI v12.2準備中...\nレース情報を送信してください"
+    else:
+        reply_text = f"受信: {user_message}\n競馬予想には「予想」を含むメッセージを送信してください"
     
-    - name: Push
-      run: docker push gcr.io/$PROJECT_ID/$SERVICE_NAME
-    
-    - name: Deploy
-      run: |
-        gcloud run deploy $SERVICE_NAME \
-          --image gcr.io/$PROJECT_ID/$SERVICE_NAME \
-          --platform managed \
-          --region $REGION \
-          --allow-unauthenticated \
-          --set-env-vars LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply_text)
+    )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
