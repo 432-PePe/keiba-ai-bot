@@ -23,7 +23,8 @@ jobs:
 - name: Install dependencies
   run: |
     python -m pip install --upgrade pip
-    pip install Flask==2.3.3 line-bot-sdk==3.5.0 requests==2.31.0
+    pip install Flask==2.3.3 line-bot-sdk==3.5.0 requests==2.31.0 aiohttp==3.8.6
+    pip install beautifulsoup4==4.12.2 pandas==2.0.3 numpy==1.24.3
     pip install pytest pytest-asyncio
     
     - name: Run basic tests
