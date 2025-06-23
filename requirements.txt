@@ -1,0 +1,41 @@
+# Web Framework
+Flask==2.3.3
+gunicorn==21.2.0
+
+# LINE Bot SDK
+line-bot-sdk==3.5.0
+
+# HTTP Client
+aiohttp==3.8.6
+requests==2.31.0
+
+# HTML Parsing
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Data Processing
+pandas==2.0.3
+numpy==1.24.3
+
+# Google Cloud
+google-cloud-run==0.10.0
+google-cloud-scheduler==2.13.3
+google-cloud-storage==2.10.0
+
+# Database (for future use)
+sqlalchemy==2.0.21
+psycopg2-binary==2.9.7
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+chardet==5.2.0
+
+# Development
+pytest==7.4.2
+pytest-asyncio==0.21.1
+black==23.9.1
+flake8==6.1.0
+
+# Async Support
+asyncio==3.4.3
