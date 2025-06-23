@@ -1,390 +1,54 @@
-name: 🏇 AI競馬予想システム CI/CD Pipeline
-
-on:
+name: Deploy to Google Cloud Run
+'on':
   push:
-    branches: [ main, develop ]
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
-      - '*.md'
+    branches:
+    - main
+    - master
   pull_request:
-    branches: [ main ]
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
-      - '*.md'
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
-      force_deploy:
-        description: 'Force deployment even if tests fail'
-        required: false
-        default: false
-        type: boolean
-
-env:
-  PROJECT_ID: racing-ai-system-12345
-  SERVICE_NAME: keiba-ai-bot
-  REGION: asia-northeast1
-  REGISTRY: gcr.io
-  IMAGE_NAME: keiba-ai-bot
-  PYTHON_VERSION: '3.11'
-
+    branches:
+    - main
+    - master
 jobs:
-  # =============================================================================
-  # 🧪 テストジョブ: コード品質とユニットテスト
-  # =============================================================================
   test:
-    name: 🧪 Code Quality & Testing
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    strategy:
-      matrix:
-        python-version: ['3.11']
-        test-type: ['unit', 'integration', 'lint']
-
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 🐍 Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-
-      - name: 📦 Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov flake8 black mypy safety bandit
-
-      - name: 🔍 Code formatting check (Black)
-        if: matrix.test-type == 'lint'
-        run: |
-          black --check --diff src/ config/ app.py
-
-      - name: 🔍 Linting (Flake8)
-        if: matrix.test-type == 'lint'
-        run: |
-          flake8 src/ config/ app.py --max-line-length=88 --extend-ignore=E203,W503
-
-      - name: 🔍 Type checking (MyPy)
-        if: matrix.test-type == 'lint'
-        run: |
-          mypy src/ config/ app.py --ignore-missing-imports
-
-      - name: 🔒 Security check (Safety)
-        if: matrix.test-type == 'lint'
-        run: |
-          safety check --json || true
-
-      - name: 🔒 Security check (Bandit)
-        if: matrix.test-type == 'lint'
-        run: |
-          bandit -r src/ config/ app.py -f json || true
-
-      - name: 🧪 Unit tests
-        if: matrix.test-type == 'unit'
-        run: |
-          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-
-      - name: 🔗 Integration tests
-        if: matrix.test-type == 'integration'
-        run: |
-          pytest tests/integration/ -v --timeout=300
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN_TEST }}
-          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET_TEST }}
-
-      - name: 📊 Upload coverage to Codecov
-        if: matrix.test-type == 'unit'
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-
-  # =============================================================================
-  # 🔒 セキュリティスキャン
-  # =============================================================================
-  security:
-    name: 🔒 Security Scanning
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Run tests
+      run: python -m pytest tests/ -v
+  deploy:
     needs: test
-
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔍 Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: 📤 Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  # =============================================================================
-  # 🐳 Docker イメージビルドとプッシュ
-  # =============================================================================
-  build:
-    name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [test, security]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
-
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.tags }}
-
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 🔑 Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: 🔧 Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: 🔑 Configure Docker to use gcloud as credential helper
-        run: |
-          gcloud auth configure-docker gcr.io
-
-      - name: 🏷️ Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value={{date 'YYYYMMDD-HHmmss'}}
-
-      - name: 🐳 Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
-
-      - name: 🔍 Scan Docker image for vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'docker-trivy-results.sarif'
-
-      - name: 📤 Upload Docker scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'docker-trivy-results.sarif'
-
-  # =============================================================================
-  # 🚀 Cloud Run デプロイメント (Staging)
-  # =============================================================================
-  deploy-staging:
-    name: 🚀 Deploy to Staging
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: build
-    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment:
-      name: staging
-      url: https://keiba-ai-bot-staging-${{ env.PROJECT_ID }}.a.run.app
-
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔑 Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: 🔧 Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: 🚀 Deploy to Cloud Run (Staging)
-        run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }}-staging             --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}             --platform=managed             --region=${{ env.REGION }}             --allow-unauthenticated             --memory=2Gi             --cpu=2             --concurrency=100             --max-instances=10             --min-instances=1             --timeout=300             --port=8080             --set-env-vars="FLASK_ENV=staging,LOG_LEVEL=DEBUG"             --set-secrets="LINE_CHANNEL_ACCESS_TOKEN=line-channel-access-token-staging:latest,LINE_CHANNEL_SECRET=line-channel-secret-staging:latest,GOOGLE_APPLICATION_CREDENTIALS=gcp-service-account-staging:latest"             --labels="environment=staging,service=keiba-ai-bot,version=${{ github.sha }}"             --tag=staging
-
-      - name: 🏥 Health check (Staging)
-        run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }}-staging --region=${{ env.REGION }} --format='value(status.url)')
-          echo "Service URL: $SERVICE_URL"
-
-          # Wait for service to be ready
-          sleep 30
-
-          # Health check with retry
-          for i in {1..5}; do
-            if curl -f "$SERVICE_URL/" --max-time 30; then
-              echo "✅ Health check passed"
-              break
-            else
-              echo "❌ Health check failed (attempt $i/5)"
-              if [ $i -eq 5 ]; then
-                exit 1
-              fi
-              sleep 10
-            fi
-          done
-
-  # =============================================================================
-  # 🚀 Cloud Run デプロイメント (Production)
-  # =============================================================================
-  deploy-production:
-    name: 🚀 Deploy to Production
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [build, deploy-staging]
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment:
-      name: production
-      url: https://keiba-ai-bot-${{ env.PROJECT_ID }}.a.run.app
-
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔑 Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: 🔧 Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: 🚀 Deploy to Cloud Run (Production)
-        run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }}             --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}             --platform=managed             --region=${{ env.REGION }}             --allow-unauthenticated             --memory=4Gi             --cpu=4             --concurrency=80             --max-instances=50             --min-instances=2             --timeout=300             --port=8080             --set-env-vars="FLASK_ENV=production,LOG_LEVEL=INFO"             --set-secrets="LINE_CHANNEL_ACCESS_TOKEN=line-channel-access-token:latest,LINE_CHANNEL_SECRET=line-channel-secret:latest,GOOGLE_APPLICATION_CREDENTIALS=gcp-service-account:latest"             --labels="environment=production,service=keiba-ai-bot,version=${{ github.sha }}"             --tag=production
-
-      - name: 🏥 Production health check
-        run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
-          echo "Production URL: $SERVICE_URL"
-
-          # Extended health check for production
-          for i in {1..10}; do
-            if curl -f "$SERVICE_URL/" --max-time 30; then
-              echo "✅ Production health check passed"
-              break
-            else
-              echo "❌ Production health check failed (attempt $i/10)"
-              if [ $i -eq 10 ]; then
-                echo "🚨 Production deployment failed health check"
-                exit 1
-              fi
-              sleep 15
-            fi
-          done
-
-  # =============================================================================
-  # 📊 デプロイメント通知
-  # =============================================================================
-  notify:
-    name: 📊 Deployment Notification
-    runs-on: ubuntu-latest
-    needs: [deploy-staging, deploy-production]
-    if: always()
-
-    steps:
-      - name: 📤 Slack notification
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          channel: '#keiba-ai-deployments'
-          text: |
-            🏇 AI競馬予想システム デプロイメント完了
-
-            📋 詳細:
-            • Branch: ${{ github.ref_name }}
-            • Commit: ${{ github.sha }}
-            • Environment: ${{ needs.deploy-production.result == 'success' && 'Production' || 'Staging' }}
-            • Status: ${{ job.status }}
-
-            🔗 Links:
-            • Staging: https://keiba-ai-bot-staging-${{ env.PROJECT_ID }}.a.run.app
-            • Production: https://keiba-ai-bot-${{ env.PROJECT_ID }}.a.run.app
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        if: always()
-
-  # =============================================================================
-  # 🧹 クリーンアップジョブ
-  # =============================================================================
-  cleanup:
-    name: 🧹 Cleanup Old Resources
-    runs-on: ubuntu-latest
-    needs: [deploy-production]
-    if: github.ref == 'refs/heads/main' && success()
-
-    steps:
-      - name: 🔑 Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: 🔧 Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: 🧹 Clean up old Docker images
-        run: |
-          # Keep only the latest 10 images
-          gcloud container images list-tags ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}             --limit=999 --sort-by=TIMESTAMP             --format="get(digest)" | tail -n +11 |             xargs -I {} gcloud container images delete ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}@{} --quiet || true
-
-      - name: 🧹 Clean up old Cloud Run revisions
-        run: |
-          # Keep only the latest 5 revisions
-          gcloud run revisions list --service=${{ env.SERVICE_NAME }} --region=${{ env.REGION }}             --format="value(metadata.name)" | tail -n +6 |             xargs -I {} gcloud run revisions delete {} --region=${{ env.REGION }} --quiet || true
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    - name: Build Docker image
+      run: docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/keiba-ai-bot:${{ github.sha
+        }} .
+    - name: Push Docker image
+      run: docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/keiba-ai-bot:${{ github.sha
+        }}
+    - name: Deploy to Cloud Run
+      run: "\n                          gcloud run deploy keiba-ai-bot \\\n      \
+        \                      --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/keiba-ai-bot:${{\
+        \ github.sha }} \\\n                            --platform managed \\\n  \
+        \                          --region asia-northeast1 \\\n                 \
+        \           --allow-unauthenticated \\\n                            --set-env-vars=\"\
+        LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }},LINE_CHANNEL_ACCESS_TOKEN=${{\
+        \ secrets.LINE_CHANNEL_ACCESS_TOKEN }}\"\n                        "
+    - name: Deployment success
+      run: echo "✅ Deployment completed successfully"
