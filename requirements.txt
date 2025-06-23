@@ -1,38 +1,132 @@
-# Web Framework
+# Flask Web Framework
 Flask==2.3.3
+Flask-CORS==4.0.0
 gunicorn==21.2.0
 
 # LINE Bot SDK
 line-bot-sdk==3.5.0
 
-# HTTP Client
-aiohttp==3.8.6
+# HTTP Requests and Web Scraping
 requests==2.31.0
-
-# HTML Parsing
+urllib3==2.0.7
 beautifulsoup4==4.12.2
-lxml==4.9.3
+selenium==4.15.2
+aiohttp==3.9.1
+httpx==0.25.2
 
-# Data Processing
-pandas==2.0.3
-numpy==1.24.3
+# Data Processing and Analysis
+pandas==2.1.4
+numpy==1.24.4
+scipy==1.11.4
+scikit-learn==1.3.2
+matplotlib==3.8.2
+seaborn==0.13.0
+plotly==5.17.0
 
-# Google Cloud
-google-cloud-run==0.10.0
-google-cloud-scheduler==2.13.3
-google-cloud-storage==2.10.0
+# Machine Learning and AI
+tensorflow==2.15.0
+torch==2.1.1
+transformers==4.36.2
+lightgbm==4.1.0
+xgboost==2.0.2
+catboost==1.2.2
 
-# Database (for future use)
-sqlalchemy==2.0.21
-psycopg2-binary==2.9.7
+# Natural Language Processing
+janome==0.5.0
+mecab-python3==1.0.6
+sudachipy==0.6.7
+sudachidict-core==20230927
 
-# Utilities
+# Database and Storage
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+redis==5.0.1
+pymongo==4.6.0
+
+# Async Programming
+asyncio==3.4.3
+aiofiles==23.2.1
+asyncpg==0.29.0
+
+# Data Validation and Serialization
+pydantic==2.5.2
+marshmallow==3.20.1
+jsonschema==4.20.0
+
+# Date and Time Handling
 python-dateutil==2.8.2
 pytz==2023.3
-chardet==5.2.0
+arrow==1.3.0
 
-# Development
-pytest==7.4.2
+# Logging and Monitoring
+structlog==23.2.0
+sentry-sdk==1.39.2
+
+# Configuration Management
+python-dotenv==1.0.0
+pyyaml==6.0.1
+configparser==6.0.0
+
+# Task Scheduling
+APScheduler==3.10.4
+celery==5.3.4
+
+# Image Processing
+Pillow==10.1.0
+opencv-python==4.8.1.78
+
+# Financial Data and APIs
+yfinance==0.2.28
+alpha-vantage==2.3.1
+ccxt==4.1.64
+
+# Web Scraping Utilities
+lxml==4.9.3
+html5lib==1.1
+cssselect==1.2.0
+pyquery==2.0.0
+
+# Data Export and Import
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+python-docx==1.1.0
+
+# Caching
+cachetools==5.3.2
+diskcache==5.6.3
+
+# Testing (for development)
+pytest==7.4.3
 pytest-asyncio==0.21.1
-black==23.9.1
+pytest-mock==3.12.0
+
+# Security
+cryptography==41.0.8
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# Environment and System
+psutil==5.9.6
+python-magic==0.4.27
+
+# Japanese Text Processing
+mojimoji==0.0.12
+jaconv==0.3.4
+
+# Racing Data Specific
+selenium-wire==5.1.0
+fake-useragent==1.4.0
+
+# Cloud Services
+google-cloud-storage==2.10.0
+google-cloud-logging==3.8.0
+google-cloud-secret-manager==2.16.4
+
+# Performance Monitoring
+memory-profiler==0.61.0
+py-spy==0.3.14
+
+# Development Tools
+black==23.11.0
 flake8==6.1.0
+mypy==1.7.1
