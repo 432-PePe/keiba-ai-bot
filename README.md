@@ -11,3 +11,5 @@
 ## 更新履歴
 - 2025-06-23: システム構築完了
 - 依存関係の問題を解決
+
+## Status: Deploying to Cloud Run
