@@ -307,3 +307,400 @@ class RaceCollector:
         return {
             'horses': [],
             'jockeys
+    async def _fetch_jra_race_detail(self, session: aiohttp.ClientSession, race: Dict) -> Dict:
+        """JRA公式レース詳細取得"""
+        try:
+            race_id = race.get('race_id', '')
+            if not race_id:
+                return {}
+            
+            url = f"{Config.JRA_BASE_URL}/race/detail/{race_id}"
+            
+            async with session.get(url, timeout=30) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    return self._parse_jra_race_detail(html)
+                    
+        except Exception as e:
+            logger.error(f"JRA race detail error: {str(e)}")
+        
+        return {}
+
+    async def _fetch_netkeiba_race_detail(self, session: aiohttp.ClientSession, race: Dict) -> Dict:
+        """netkeibaレース詳細取得"""
+        try:
+            race_url = race.get('race_url', '')
+            if not race_url:
+                return {}
+            
+            async with session.get(race_url, timeout=30) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    return self._parse_netkeiba_race_detail(html)
+                    
+        except Exception as e:
+            logger.error(f"Netkeiba race detail error: {str(e)}")
+        
+        return {}
+
+    def _parse_jra_race_detail(self, html: str) -> Dict:
+        """JRA公式レース詳細解析"""
+        detail = {}
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 出走馬情報
+            horses = []
+            horse_table = soup.find('table', class_='horse-table')
+            if horse_table:
+                rows = horse_table.find_all('tr')[1:]  # ヘッダー除く
+                
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) >= 10:
+                        horse_info = {
+                            'barrier': cells[0].text.strip(),
+                            'horse_number': cells[1].text.strip(),
+                            'horse_name': cells[2].text.strip(),
+                            'age': cells[3].text.strip(),
+                            'sex': cells[4].text.strip(),
+                            'weight': cells[5].text.strip(),
+                            'jockey': cells[6].text.strip(),
+                            'trainer': cells[7].text.strip(),
+                            'owner': cells[8].text.strip(),
+                            'odds': cells[9].text.strip() if len(cells) > 9 else '',
+                        }
+                        horses.append(horse_info)
+            
+            detail['horses'] = horses
+            
+            # レース条件
+            condition_div = soup.find('div', class_='race-condition')
+            if condition_div:
+                detail['condition'] = condition_div.text.strip()
+            
+            # 天候・馬場状態
+            weather_div = soup.find('div', class_='weather')
+            if weather_div:
+                detail['weather'] = weather_div.text.strip()
+                
+        except Exception as e:
+            logger.error(f"JRA detail parsing error: {str(e)}")
+        
+        return detail
+
+    def _parse_netkeiba_race_detail(self, html: str) -> Dict:
+        """netkeibaレース詳細解析"""
+        detail = {}
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 出走表解析
+            shutuba_table = soup.find('table', class_='race_table_01')
+            if shutuba_table:
+                horses = []
+                rows = shutuba_table.find_all('tr', class_='HorseList')
+                
+                for row in rows:
+                    horse_data = self._extract_netkeiba_horse_data(row)
+                    if horse_data:
+                        horses.append(horse_data)
+                
+                detail['horses'] = horses
+            
+            # 血統情報
+            pedigree_data = self._extract_pedigree_data(soup)
+            if pedigree_data:
+                detail['bloodlines'] = pedigree_data
+            
+            # 過去成績
+            past_performances = self._extract_past_performances(soup)
+            if past_performances:
+                detail['past_performances'] = past_performances
+                
+        except Exception as e:
+            logger.error(f"Netkeiba detail parsing error: {str(e)}")
+        
+        return detail
+
+    def _extract_netkeiba_horse_data(self, row) -> Optional[Dict]:
+        """netkeiba馬データ抽出"""
+        try:
+            cells = row.find_all('td')
+            if len(cells) < 15:
+                return None
+            
+            return {
+                'barrier': cells[0].text.strip(),
+                'horse_number': cells[1].text.strip(),
+                'horse_name': cells[3].find('a').text.strip() if cells[3].find('a') else '',
+                'age': cells[4].text.strip(),
+                'sex': cells[4].text.strip(),
+                'weight': cells[5].text.strip(),
+                'jockey': cells[6].find('a').text.strip() if cells[6].find('a') else '',
+                'trainer': cells[7].find('a').text.strip() if cells[7].find('a') else '',
+                'odds': cells[12].text.strip(),
+                'popularity': cells[13].text.strip(),
+            }
+            
+        except Exception as e:
+            logger.error(f"Horse data extraction error: {str(e)}")
+            return None
+
+    def _extract_pedigree_data(self, soup) -> Dict:
+        """血統データ抽出"""
+        pedigree = {}
+        
+        try:
+            # 血統表の解析（実装省略）
+            pedigree_table = soup.find('table', class_='blood_table')
+            if pedigree_table:
+                # 3代血統の抽出
+                pedigree = {
+                    'father': '',
+                    'mother': '',
+                    'father_father': '',
+                    'father_mother': '',
+                    'mother_father': '',
+                    'mother_mother': '',
+                }
+                
+        except Exception as e:
+            logger.error(f"Pedigree extraction error: {str(e)}")
+        
+        return pedigree
+
+    def _extract_past_performances(self, soup) -> List[Dict]:
+        """過去成績抽出"""
+        performances = []
+        
+        try:
+            # 過去成績表の解析（実装省略）
+            past_table = soup.find('table', class_='db_h_race_results')
+            if past_table:
+                rows = past_table.find_all('tr')[1:]  # ヘッダー除く
+                
+                for row in rows:
+                    # 各レースの成績データ抽出
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Past performance extraction error: {str(e)}")
+        
+        return performances
+
+    async def _fetch_additional_race_info(self, session: aiohttp.ClientSession, race: Dict) -> Dict:
+        """追加情報収集（keibalab, umanity等）"""
+        additional_info = {}
+        
+        try:
+            # keibalab から統計情報
+            keibalab_info = await self._fetch_keibalab_info(session, race)
+            additional_info.update(keibalab_info)
+            
+            # umanity からAI分析
+            umanity_info = await self._fetch_umanity_info(session, race)
+            additional_info.update(umanity_info)
+            
+        except Exception as e:
+            logger.error(f"Additional info collection error: {str(e)}")
+        
+        return additional_info
+
+    async def _fetch_keibalab_info(self, session: aiohttp.ClientSession, race: Dict) -> Dict:
+        """keibalab情報取得"""
+        # 実装省略（実際のAPIに合わせて実装）
+        return {
+            'statistics': {},
+            'trends': {}
+        }
+
+    async def _fetch_umanity_info(self, session: aiohttp.ClientSession, race: Dict) -> Dict:
+        """umanity AI分析取得"""
+        # 実装省略（実際のAPIに合わせて実装）
+        return {
+            'ai_prediction': {},
+            'confidence_score': 0
+        }
+
+    async def _validate_and_fix_encoding(self, race_data: List[Dict]) -> List[Dict]:
+        """文字化け検証・修復"""
+        validated_data = []
+        
+        for race in race_data:
+            validated_race = await self._fix_single_race_encoding(race)
+            if validated_race:
+                validated_data.append(validated_race)
+        
+        return validated_data
+
+    async def _fix_single_race_encoding(self, race_data: Dict) -> Optional[Dict]:
+        """単一レースの文字化け修復"""
+        try:
+            fixed_race = race_data.copy()
+            
+            # 文字化け検出・修復
+            for key, value in race_data.items():
+                if isinstance(value, str):
+                    fixed_value = self._fix_encoding_string(value)
+                    fixed_race[key] = fixed_value
+                elif isinstance(value, list):
+                    fixed_list = []
+                    for item in value:
+                        if isinstance(item, dict):
+                            fixed_item = await self._fix_single_race_encoding(item)
+                            if fixed_item:
+                                fixed_list.append(fixed_item)
+                        else:
+                            fixed_list.append(item)
+                    fixed_race[key] = fixed_list
+            
+            return fixed_race
+            
+        except Exception as e:
+            logger.error(f"Encoding fix error: {str(e)}")
+            return None
+
+    def _fix_encoding_string(self, text: str) -> str:
+        """文字列の文字化け修復"""
+        if not text:
+            return text
+        
+        try:
+            # 日本語文字範囲チェック
+            if self._is_valid_japanese_text(text):
+                return text
+            
+            # 文字化け修復試行
+            for encoding in Config.ENCODING_PRIORITY:
+                try:
+                    # エンコーディング変換試行
+                    bytes_data = text.encode('latin1')
+                    decoded_text = bytes_data.decode(encoding)
+                    
+                    if self._is_valid_japanese_text(decoded_text):
+                        return decoded_text
+                        
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    continue
+            
+            # 修復不可の場合は元の文字列を返す
+            return text
+            
+        except Exception as e:
+            logger.error(f"String encoding fix error: {str(e)}")
+            return text
+
+    def _is_valid_japanese_text(self, text: str) -> bool:
+        """日本語テキストの妥当性チェック"""
+        if not text:
+            return True
+        
+        # 日本語文字範囲チェック
+        japanese_ranges = [
+            (0x3040, 0x309F),  # ひらがな
+            (0x30A0, 0x30FF),  # カタカナ
+            (0x4E00, 0x9FAF),  # 漢字
+            (0xFF00, 0xFFEF),  # 全角英数字
+        ]
+        
+        japanese_char_count = 0
+        total_chars = len(text)
+        
+        for char in text:
+            char_code = ord(char)
+            for start, end in japanese_ranges:
+                if start <= char_code <= end:
+                    japanese_char_count += 1
+                    break
+        
+        # 日本語文字が50%以上含まれていれば有効とみなす
+        return (japanese_char_count / total_chars) >= 0.5 if total_chars > 0 else True
+
+    def _assess_data_quality(self, race_data: List[Dict]) -> Dict[str, Any]:
+        """データ品質評価"""
+        if not race_data:
+            return {
+                'overall_quality': 0.0,
+                'required_completeness': 0.0,
+                'recommended_completeness': 0.0,
+                'encoding_quality': 0.0,
+                'errors': ['No race data collected']
+            }
+        
+        total_required_score = 0
+        total_recommended_score = 0
+        total_encoding_score = 0
+        errors = []
+        
+        for race in race_data:
+            # 必須フィールド完全性チェック
+            required_completeness = self._check_field_completeness(race, self.required_fields)
+            total_required_score += required_completeness
+            
+            # 推奨フィールド完全性チェック
+            recommended_completeness = self._check_field_completeness(race, self.recommended_fields)
+            total_recommended_score += recommended_completeness
+            
+            # 文字化け品質チェック
+            encoding_quality = self._check_encoding_quality(race)
+            total_encoding_score += encoding_quality
+            
+            if required_completeness < 1.0:
+                errors.append(f"Race {race.get('race_name', 'Unknown')}: Required fields incomplete")
+        
+        race_count = len(race_data)
+        avg_required = total_required_score / race_count
+        avg_recommended = total_recommended_score / race_count
+        avg_encoding = total_encoding_score / race_count
+        
+        # 総合品質スコア
+        overall_quality = (avg_required * 0.5 + avg_recommended * 0.3 + avg_encoding * 0.2)
+        
+        return {
+            'overall_quality': overall_quality,
+            'required_completeness': avg_required,
+            'recommended_completeness': avg_recommended,
+            'encoding_quality': avg_encoding,
+            'race_count': race_count,
+            'errors': errors
+        }
+
+    def _check_field_completeness(self, race_data: Dict, fields: List[str]) -> float:
+        """フィールド完全性チェック"""
+        completed_fields = 0
+        
+        for field in fields:
+            if field in race_data and race_data[field]:
+                completed_fields += 1
+        
+        return completed_fields / len(fields) if fields else 1.0
+
+    def _check_encoding_quality(self, race_data: Dict) -> float:
+        """文字化け品質チェック"""
+        text_fields = ['race_name', 'track', 'condition']
+        valid_fields = 0
+        
+        for field in text_fields:
+            if field in race_data:
+                text = str(race_data[field])
+                if self._is_valid_japanese_text(text):
+                    valid_fields += 1
+        
+        return valid_fields / len(text_fields) if text_fields else 1.0
+
+    async def collect_specific_race(self, race_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """特定レース情報収集"""
+        try:
+            # 簡易的な特定レース収集（実装省略）
+            return {
+                'race_name': race_info.get('race_name', '指定レース'),
+                'horses': [],
+                'basic_info': race_info
+            }
+            
+        except Exception as e:
+            logger.error(f"Specific race collection error: {str(e)}")
+            return None
